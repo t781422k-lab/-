@@ -1,0 +1,188 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { Play, Square, Settings, X, RefreshCw } from 'lucide-react';
+
+export default function App() {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [phase, setPhase] = useState('idle'); // idle, wait, down, hold, up
+  const [progress, setProgress] = useState(0);
+  const [showSettings, setShowSettings] = useState(false);
+
+  // デフォルトの設定（秒）
+  const [settings, setSettings] = useState({
+    wait: 2.0, // 最初の待機時間
+    down: 1.0, // 下げる時間
+    hold: 1.0, // 止める時間
+    up: 2.0,   // 上げる時間
+  });
+
+  const requestRef = useRef();
+  const startTimeRef = useRef();
+  const phaseRef = useRef('idle');
+
+  // アニメーションループ
+  const animate = (time) => {
+    if (!startTimeRef.current) startTimeRef.current = time;
+    const elapsed = (time - startTimeRef.current) / 1000;
+
+    let currentDuration = settings[phaseRef.current] || 1;
+
+    if (elapsed >= currentDuration) {
+      // フェーズの切り替え
+      startTimeRef.current = time;
+      switch (phaseRef.current) {
+        case 'wait': phaseRef.current = 'down'; break;
+        case 'down': phaseRef.current = 'hold'; break;
+        case 'hold': phaseRef.current = 'up'; break;
+        case 'up':   phaseRef.current = 'wait'; break;
+        default: break;
+      }
+      setPhase(phaseRef.current);
+      setProgress(0);
+    } else {
+      setProgress(elapsed / currentDuration);
+    }
+
+    requestRef.current = requestAnimationFrame(animate);
+  };
+
+  useEffect(() => {
+    if (isPlaying) {
+      phaseRef.current = 'wait';
+      setPhase('wait');
+      startTimeRef.current = null;
+      requestRef.current = requestAnimationFrame(animate);
+    } else {
+      cancelAnimationFrame(requestRef.current);
+      setPhase('idle');
+      setProgress(0);
+    }
+    return () => cancelAnimationFrame(requestRef.current);
+  }, [isPlaying, settings]);
+
+  // 設定変更ハンドラ
+  const handleSettingChange = (key, value) => {
+    const num = parseFloat(value);
+    if (!isNaN(num) && num > 0) {
+      setSettings(prev => ({ ...prev, [key]: num }));
+    }
+  };
+
+  // 画面の表示情報をフェーズごとに定義
+  const phaseConfig = {
+    idle: { color: 'bg-gray-100', text: '待機中', textColor: 'text-gray-500', barHeight: 100 },
+    wait: { color: 'bg-blue-500', text: '気をつけ', textColor: 'text-white', barHeight: 100 },
+    down: { color: 'bg-red-500', text: '下げる！', textColor: 'text-white', barHeight: 100 - (progress * 100) },
+    hold: { color: 'bg-yellow-400', text: '止める！', textColor: 'text-white', barHeight: 0 },
+    up:   { color: 'bg-green-500', text: 'ゆっくり上げる', textColor: 'text-white', barHeight: progress * 100 },
+  };
+
+  const currentConfig = phaseConfig[phase];
+
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-900 overflow-hidden relative font-sans">
+      
+      {/* メインのカラー背景とアニメーションエリア */}
+      <div className={`absolute inset-0 transition-colors duration-200 ${currentConfig.color} opacity-20`}></div>
+      
+      {/* お辞儀の深さを表すインジケーター */}
+      <div className="z-10 w-full max-w-2xl px-4 flex flex-col items-center">
+        
+        <div className="relative w-64 h-64 md:w-96 md:h-96 bg-gray-800 rounded-full border-8 border-gray-700 overflow-hidden shadow-2xl mb-8">
+          {/* 動くゲージ */}
+          <div 
+            className={`absolute bottom-0 w-full transition-colors duration-200 ${currentConfig.color}`}
+            style={{ height: `${currentConfig.barHeight}%` }}
+          ></div>
+          
+          {/* 中央のテキスト */}
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className={`text-4xl md:text-6xl font-black tracking-wider ${currentConfig.textColor} drop-shadow-md`}>
+              {currentConfig.text}
+            </span>
+          </div>
+        </div>
+
+        {/* コントロールボタン */}
+        <div className="flex space-x-4 z-10">
+          {!isPlaying ? (
+            <button 
+              onClick={() => setIsPlaying(true)}
+              className="flex items-center px-8 py-4 bg-white text-gray-900 rounded-full font-bold text-xl md:text-2xl hover:bg-gray-200 transition shadow-lg"
+            >
+              <Play className="w-8 h-8 mr-2 fill-current" />
+              練習スタート
+            </button>
+          ) : (
+            <button 
+              onClick={() => setIsPlaying(false)}
+              className="flex items-center px-8 py-4 bg-gray-800 text-white border-2 border-white rounded-full font-bold text-xl md:text-2xl hover:bg-gray-700 transition shadow-lg"
+            >
+              <Square className="w-8 h-8 mr-2 fill-current" />
+              ストップ
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 設定ボタン */}
+      <button 
+        onClick={() => setShowSettings(true)}
+        className="absolute top-6 right-6 p-3 bg-gray-800/50 text-white rounded-full hover:bg-gray-700 transition z-20"
+      >
+        <Settings className="w-8 h-8" />
+      </button>
+
+      {/* 設定モーダル */}
+      {showSettings && (
+        <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-30 p-4">
+          <div className="bg-white rounded-2xl p-8 max-w-sm w-full shadow-2xl">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-gray-800">秒数設定</h2>
+              <button onClick={() => setShowSettings(false)} className="text-gray-500 hover:text-gray-800">
+                <X className="w-8 h-8" />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <SettingRow label="待機 (気をつけ)" value={settings.wait} onChange={(v) => handleSettingChange('wait', v)} color="bg-blue-500" />
+              <SettingRow label="下げる" value={settings.down} onChange={(v) => handleSettingChange('down', v)} color="bg-red-500" />
+              <SettingRow label="止める" value={settings.hold} onChange={(v) => handleSettingChange('hold', v)} color="bg-yellow-400" />
+              <SettingRow label="上げる" value={settings.up} onChange={(v) => handleSettingChange('up', v)} color="bg-green-500" />
+            </div>
+
+            <button 
+              onClick={() => setShowSettings(false)}
+              className="mt-8 w-full py-3 bg-gray-900 text-white rounded-xl font-bold text-lg hover:bg-gray-800 transition"
+            >
+              閉じる
+            </button>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}
+
+// 設定用の入力行コンポーネント
+function SettingRow({ label, value, onChange, color }) {
+  return (
+    <div className="flex items-center justify-between">
+      <div className="flex items-center">
+        <div className={`w-4 h-4 rounded-full mr-3 ${color}`}></div>
+        <span className="font-bold text-gray-700">{label}</span>
+      </div>
+      <div className="flex items-center">
+        <input 
+          type="number" 
+          step="0.1" 
+          min="0.1"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-20 p-2 text-right border-2 border-gray-200 rounded-lg focus:border-gray-900 focus:outline-none font-bold text-lg"
+        />
+        <span className="ml-2 text-gray-500 font-bold">秒</span>
+      </div>
+    </div>
+  );
+}
